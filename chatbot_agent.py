@@ -1,20 +1,45 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from langchain.memory import ConversationBufferMemory
-from langchain.llms import OpenAI
-from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.schema import BaseRetriever
+from langchain.llms.base import LLM
 import config
+import ollama
+import requests
+
+class OllamaLLM(LLM):
+    """Custom Ollama LLM wrapper for LangChain"""
+    
+    model_name: str = config.OLLAMA_MODEL
+    base_url: str = config.OLLAMA_BASE_URL
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
+    @property
+    def _llm_type(self) -> str:
+        return "ollama"
+    
+    def _call(self, prompt: str, stop: Optional[list] = None) -> str:
+        try:
+            response = ollama.chat(
+                model=self.model_name,
+                messages=[{'role': 'user', 'content': prompt}],
+                stream=False
+            )
+            return response['message']['content']
+        except Exception as e:
+            return f"Error calling Ollama: {str(e)}"
+    
+    @property
+    def _identifying_params(self) -> Dict[str, Any]:
+        return {"model_name": self.model_name, "base_url": self.base_url}
 
 class PersonalChatbotAgent:
-    def __init__(self, vector_store_retriever: BaseRetriever):
-        self.llm = ChatOpenAI(
-            openai_api_key=config.OPENAI_API_KEY,
-            model_name=config.OPENAI_MODEL,
-            temperature=config.TEMPERATURE,
-            max_tokens=config.MAX_TOKENS
-        )
+    def __init__(self, vector_store_retriever: Optional[BaseRetriever] = None):
+        # Use free local Ollama model
+        self.llm = OllamaLLM()
         
         self.memory = ConversationBufferMemory(
             memory_key="chat_history",
@@ -24,83 +49,60 @@ class PersonalChatbotAgent:
         
         self.retriever = vector_store_retriever
         
-        # Create the conversational chain
-        self.chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=self.retriever,
-            memory=self.memory,
-            return_source_documents=True,
-            verbose=True
-        )
-        
-        # Customize the prompt to include personality
-        self.chain.combine_docs_chain.llm_chain.prompt = PromptTemplate(
-            input_variables=["context", "question", "chat_history"],
-            template=f"""
-{config.PERSONALITY_PROMPT}
-
-Based on the following context from Anees's documents, answer the question as if you are Anees:
-
-Context:
-{{context}}
-
-Chat History:
-{{chat_history}}
-
-Question: {{question}}
-
-Answer as Anees would, using first person when appropriate and drawing from the specific information in the context. If the question can't be answered from the context, say so honestly but still try to be helpful.
-
-Answer:"""
-        )
+        # Create the conversational chain if we have a retriever
+        if self.retriever:
+            self.chain = ConversationalRetrievalChain.from_llm(
+                llm=self.llm,
+                retriever=self.retriever,
+                memory=self.memory,
+                return_source_documents=True,
+                combine_docs_chain_kwargs={
+                    "prompt": PromptTemplate(
+                        input_variables=["context", "question"],
+                        template=f"{config.PERSONALITY_PROMPT}\n\nContext: {{context}}\n\nQuestion: {{question}}\n\nAnswer:"
+                    )
+                }
+            )
+        else:
+            self.chain = None
     
     def ask(self, question: str) -> Dict[str, Any]:
-        """Process a question and return the response with sources."""
-        try:
-            response = self.chain({"question": question})
-            
-            # Extract source information
-            sources = []
-            if 'source_documents' in response:
-                for doc in response['source_documents']:
-                    source_info = {
-                        'filename': doc.metadata.get('filename', 'Unknown'),
-                        'type': doc.metadata.get('type', 'Unknown'),
-                        'content_preview': doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-                    }
-                    sources.append(source_info)
-            
+        """Ask a question and get a response"""
+        if not self.chain:
             return {
-                'answer': response['answer'],
-                'sources': sources,
-                'success': True
+                "answer": "I need access to your documents to answer questions. Please upload some documents first.",
+                "source_documents": []
             }
         
+        try:
+            response = self.chain({"question": question})
+            return {
+                "answer": response.get("answer", "I couldn't generate a response."),
+                "source_documents": response.get("source_documents", [])
+            }
         except Exception as e:
             return {
-                'answer': f"Sorry, I encountered an error while processing your question: {str(e)}",
-                'sources': [],
-                'success': False
+                "answer": f"I encountered an error: {str(e)}",
+                "source_documents": []
             }
     
-    def clear_memory(self):
-        """Clear the conversation memory."""
-        self.memory.clear()
+    def chat_direct(self, message: str) -> str:
+        """Direct chat without document context (useful when no documents are loaded)"""
+        try:
+            prompt = f"{config.PERSONALITY_PROMPT}\n\nUser: {message}\n\nAssistant:"
+            return self.llm._call(prompt)
+        except Exception as e:
+            return f"I encountered an error: {str(e)}"
     
-    def get_conversation_history(self):
-        """Get the current conversation history."""
-        return self.memory.chat_memory.messages
-
-# Predefined sample questions to help users get started
-SAMPLE_QUESTIONS = [
-    "What kind of engineer are you?",
-    "What are your strongest skills?",
-    "What projects are you most proud of?",
-    "Tell me about your experience with Python",
-    "What technologies do you work with?",
-    "What's your educational background?",
-    "What are your career goals?",
-    "Can you describe a challenging project you worked on?",
-    "What programming languages do you know?",
-    "What's your approach to problem-solving?"
-]
+    def clear_memory(self):
+        """Clear conversation memory"""
+        self.memory.clear()
+        
+    def is_ollama_available(self) -> bool:
+        """Check if Ollama is running and model is available"""
+        try:
+            response = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
+            models = response.json().get("models", [])
+            return any(model.get("name") == config.OLLAMA_MODEL for model in models)
+        except:
+            return False

@@ -9,7 +9,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import TextLoader, DirectoryLoader
 from langchain.schema import Document
 from langchain.vectorstores import Chroma
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.embeddings.base import Embeddings
 import config
 
@@ -31,11 +30,9 @@ class LocalEmbeddings(Embeddings):
         return embedding[0].tolist()
 
 class DocumentProcessor:
-    def __init__(self, use_free_embeddings: bool = False):
-        if use_free_embeddings:
-            self.embeddings = LocalEmbeddings()
-        else:
-            self.embeddings = OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY)
+    def __init__(self):
+        # Always use free local embeddings
+        self.embeddings = LocalEmbeddings()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=config.CHUNK_SIZE,
             chunk_overlap=config.CHUNK_OVERLAP
@@ -116,7 +113,7 @@ class DocumentProcessor:
         return documents
     
     def create_vector_store(self, documents: List[Document]) -> Chroma:
-        """Create and populate vector store with documents."""
+        """Create and populate vector store with documents using free local embeddings."""
         if not documents:
             st.warning("No documents found to process!")
             return None
@@ -124,35 +121,14 @@ class DocumentProcessor:
         # Split documents into chunks
         split_documents = self.text_splitter.split_documents(documents)
         
-        st.info(f"Processing {len(split_documents)} document chunks...")
+        st.info(f"Processing {len(split_documents)} document chunks with free local embeddings...")
         
-        # Create vector store
+        # Create vector store with local embeddings
         vector_store = Chroma.from_documents(
             documents=split_documents,
             embedding=self.embeddings,
             collection_name=config.COLLECTION_NAME,
             persist_directory=config.VECTOR_STORE_PATH
-        )
-        
-        vector_store.persist()
-        return vector_store
-    
-    def create_vector_store_free(self, documents: List[Document]) -> Chroma:
-        """Create vector store using free local embeddings (no API costs)"""
-        # Split documents into chunks
-        split_documents = self.text_splitter.split_documents(documents)
-        
-        st.info(f"Processing {len(split_documents)} document chunks with free local embeddings...")
-        
-        # Use free local embeddings
-        free_embeddings = LocalEmbeddings()
-        
-        # Create vector store
-        vector_store = Chroma.from_documents(
-            documents=split_documents,
-            embedding=free_embeddings,
-            collection_name="free_personal_documents",
-            persist_directory="./free_vector_store"
         )
         
         vector_store.persist()

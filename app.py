@@ -1,199 +1,212 @@
 import streamlit as st
 import os
+from pathlib import Path
+import tempfile
+
+# Import our modules
 from document_processor import DocumentProcessor
-from chatbot_agent import PersonalChatbotAgent, SAMPLE_QUESTIONS
+from chatbot_agent import PersonalChatbotAgent
 import config
 
-def main():
-    st.set_page_config(
-        page_title="Anees's Personal AI Assistant",
-        page_icon="🤖",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+# Page configuration
+st.set_page_config(
+    page_title="Anees's Personal AI Assistant (FREE)",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def initialize_session_state():
+    """Initialize session state variables"""
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "doc_processor" not in st.session_state:
+        st.session_state.doc_processor = DocumentProcessor()
+    if "chatbot_agent" not in st.session_state:
+        st.session_state.chatbot_agent = PersonalChatbotAgent()
+    if "vector_store_ready" not in st.session_state:
+        st.session_state.vector_store_ready = False
+
+def check_ollama_status():
+    """Check if Ollama is running and display status"""
+    agent = PersonalChatbotAgent()
+    if agent.is_ollama_available():
+        st.success(f"✅ Ollama is running with model: {config.OLLAMA_MODEL}")
+        return True
+    else:
+        st.error("❌ Ollama is not available. Please make sure Ollama is running.")
+        st.info("Run: `ollama serve` in terminal to start Ollama")
+        return False
+
+def process_documents(uploaded_files):
+    """Process uploaded documents and create vector store"""
+    if not uploaded_files:
+        return False
     
-    st.title("🤖 Anees's Personal AI Assistant")
-    st.markdown("*Ask me anything about Anees - his skills, projects, experience, and more!*")
-    
-    # Sidebar for configuration and document management
-    with st.sidebar:
-        st.header("📁 Document Management")
+    with st.spinner("Processing documents..."):
+        documents = []
         
-        # Check if OpenAI API key is set
-        if not config.OPENAI_API_KEY:
-            st.error("🔑 Please set your OpenAI API key in the .env file")
-            st.code("OPENAI_API_KEY=your_api_key_here")
-            st.stop()
-        
-        if config.OPENAI_API_KEY == "your_openai_api_key_here":
-            st.error("🔑 Please set your real OpenAI API key in the .env file")
-            st.code("OPENAI_API_KEY=sk-your-actual-key-here")
-            st.stop()
-        
-        # Document processing section
-        if st.button("🔄 Refresh Documents", help="Process documents from the data folder"):
+        for uploaded_file in uploaded_files:
             try:
-                with st.spinner("Processing documents..."):
-                    processor = DocumentProcessor()
-                    vector_store = processor.update_documents()
-                    if vector_store:
-                        st.session_state['vector_store'] = vector_store
-                        st.success("Documents processed successfully!")
-                    else:
-                        st.error("Failed to process documents")
+                # Save uploaded file temporarily
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                    tmp_file.write(uploaded_file.read())
+                    tmp_file_path = tmp_file.name
+                
+                # Process based on file type
+                if uploaded_file.name.endswith('.pdf'):
+                    docs = st.session_state.doc_processor.load_pdf(tmp_file_path)
+                elif uploaded_file.name.endswith('.docx'):
+                    docs = st.session_state.doc_processor.load_docx(tmp_file_path)
+                elif uploaded_file.name.endswith('.txt'):
+                    docs = st.session_state.doc_processor.load_text_file(tmp_file_path)
+                else:
+                    st.warning(f"Unsupported file type: {uploaded_file.name}")
+                    continue
+                
+                documents.extend(docs)
+                
+                # Clean up temp file
+                os.unlink(tmp_file_path)
+                
+                st.success(f"✅ Processed {uploaded_file.name}")
+                
             except Exception as e:
-                st.error(f"Error processing documents: {str(e)}")
-                if "api_key" in str(e).lower():
-                    st.info("💡 This might be an API key issue. Check your .env file.")
+                st.error(f"Error processing {uploaded_file.name}: {str(e)}")
+                continue
         
-        # Show data folder info
-        data_folder_exists = os.path.exists(config.DATA_FOLDER)
-        if data_folder_exists:
-            file_count = sum([len(files) for r, d, files in os.walk(config.DATA_FOLDER)])
-            st.info(f"📊 Data folder: {file_count} files found")
-        else:
-            st.warning("📁 Data folder not found. Create 'data/' and add your documents.")
+        if documents:
+            # Create vector store (this will use local embeddings, no API calls)
+            try:
+                vector_store = st.session_state.doc_processor.create_vector_store_free(documents)
+                retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+                
+                # Update chatbot agent with new retriever
+                st.session_state.chatbot_agent = PersonalChatbotAgent(vector_store_retriever=retriever)
+                st.session_state.vector_store_ready = True
+                
+                st.success(f"✅ Successfully processed {len(documents)} documents!")
+                return True
+                
+            except Exception as e:
+                st.error(f"Error creating vector store: {str(e)}")
+                return False
         
-        # Sample questions
-        st.header("💡 Sample Questions")
-        st.markdown("Click on any question to ask:")
-        
-        for question in SAMPLE_QUESTIONS[:5]:  # Show first 5 questions
-            if st.button(question, key=f"sample_{question[:20]}"):
-                st.session_state['current_question'] = question
-        
-        # Show more questions in an expander
-        with st.expander("More sample questions..."):
-            for question in SAMPLE_QUESTIONS[5:]:
-                if st.button(question, key=f"sample_more_{question[:20]}"):
-                    st.session_state['current_question'] = question
+        return False
+
+def main():
+    st.title("🤖 Free Personal Chatbot")
+    st.markdown("**Powered by Ollama (100% Free & Local)**")
     
     # Initialize session state
-    if 'messages' not in st.session_state:
-        st.session_state['messages'] = []
+    initialize_session_state()
     
-    if 'vector_store' not in st.session_state:
-        # Try to load existing vector store
-        try:
-            processor = DocumentProcessor()
-            vector_store = processor.load_existing_vector_store()
-            if vector_store:
-                st.session_state['vector_store'] = vector_store
+    # Sidebar
+    with st.sidebar:
+        st.header("📄 Document Management")
+        
+        # Check Ollama status
+        ollama_available = check_ollama_status()
+        
+        # File upload
+        uploaded_files = st.file_uploader(
+            "Upload your documents",
+            type=["pdf", "docx", "txt"],
+            accept_multiple_files=True,
+            help="Upload PDF, DOCX, or TXT files containing information about you"
+        )
+        
+        if st.button("Process Documents") and ollama_available:
+            if uploaded_files:
+                success = process_documents(uploaded_files)
+                if success:
+                    st.rerun()
             else:
-                st.warning("⚠️ No documents found. Please add documents to the 'data/' folder and click 'Refresh Documents'.")
-        except Exception as e:
-            st.error(f"Error loading vector store: {str(e)}")
-            if "api_key" in str(e).lower():
-                st.info("💡 This might be an API key issue. Check your .env file.")
-    
-    if 'chatbot' not in st.session_state and 'vector_store' in st.session_state:
-        retriever = st.session_state['vector_store'].as_retriever(search_kwargs={"k": 4})
-        st.session_state['chatbot'] = PersonalChatbotAgent(retriever)
+                st.warning("Please upload some documents first")
+        
+        # Status
+        st.subheader("📊 Status")
+        if st.session_state.vector_store_ready:
+            st.success("✅ Documents ready for questions")
+        else:
+            st.info("📤 Upload documents to enable Q&A")
+        
+        # Clear conversation
+        if st.button("🗑️ Clear Conversation"):
+            st.session_state.messages = []
+            if hasattr(st.session_state, "chatbot_agent"):
+                st.session_state.chatbot_agent.clear_memory()
+            st.rerun()
+        
+        # Model info
+        st.subheader("🔧 Model Info")
+        st.info(f"**Model**: {config.OLLAMA_MODEL}")
+        st.info("**Cost**: 100% Free")
+        st.info("**Privacy**: Runs locally")
     
     # Main chat interface
-    if 'chatbot' in st.session_state:
-        # Display chat messages
-        for message in st.session_state['messages']:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                
-                # Show sources if available
-                if message["role"] == "assistant" and "sources" in message and message["sources"]:
-                    with st.expander("📚 Sources"):
-                        for i, source in enumerate(message["sources"], 1):
-                            st.write(f"**{i}. {source['filename']}** ({source['type']})")
-                            st.text(source['content_preview'])
-                            st.divider()
-        
-        # Handle sample question selection
-        if 'current_question' in st.session_state:
-            question = st.session_state['current_question']
-            del st.session_state['current_question']
-            
-            # Add user message
-            st.session_state['messages'].append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.markdown(question)
-            
-            # Get and display assistant response
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = st.session_state['chatbot'].ask(question)
-                
-                st.markdown(response['answer'])
-                
-                # Show sources
-                if response['sources']:
-                    with st.expander("📚 Sources"):
-                        for i, source in enumerate(response['sources'], 1):
-                            st.write(f"**{i}. {source['filename']}** ({source['type']})")
-                            st.text(source['content_preview'])
-                            st.divider()
-            
-            # Add assistant message
-            st.session_state['messages'].append({
-                "role": "assistant", 
-                "content": response['answer'],
-                "sources": response['sources']
-            })
-        
-        # Chat input
-        if prompt := st.chat_input("Ask me anything about Anees..."):
-            # Add user message
-            st.session_state['messages'].append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            # Get and display assistant response
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = st.session_state['chatbot'].ask(prompt)
-                
-                st.markdown(response['answer'])
-                
-                # Show sources
-                if response['sources']:
-                    with st.expander("📚 Sources"):
-                        for i, source in enumerate(response['sources'], 1):
-                            st.write(f"**{i}. {source['filename']}** ({source['type']})")
-                            st.text(source['content_preview'])
-                            st.divider()
-            
-            # Add assistant message
-            st.session_state['messages'].append({
-                "role": "assistant", 
-                "content": response['answer'],
-                "sources": response['sources']
-            })
-        
-        # Clear conversation button
-        if st.session_state['messages'] and st.button("🗑️ Clear Conversation"):
-            st.session_state['messages'] = []
-            if 'chatbot' in st.session_state:
-                st.session_state['chatbot'].clear_memory()
-            st.rerun()
+    if not ollama_available:
+        st.warning("⚠️ Ollama is not running. Please start Ollama to use the chatbot.")
+        st.code("ollama serve", language="bash")
+        return
     
-    else:
-        # No documents loaded
-        st.info("👋 Welcome! To get started:")
-        st.markdown("""
-        1. **Add your documents** to the `data/` folder:
-           - CV/Resume (PDF, DOCX, TXT)
-           - Project descriptions (Markdown, TXT)
-           - Code snippets (Python, JavaScript, etc.)
-           - Blog posts or articles
-           - Personal notes
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask me anything about the uploaded documents..."):
+        # Add user message to chat
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
         
-        2. **Click 'Refresh Documents'** in the sidebar
+        # Generate response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                if st.session_state.vector_store_ready:
+                    response = st.session_state.chatbot_agent.ask(prompt)
+                    answer = response["answer"]
+                else:
+                    # Use direct chat without documents
+                    answer = st.session_state.chatbot_agent.chat_direct(prompt)
+                
+                st.markdown(answer)
+                
+                # Show source documents if available
+                if st.session_state.vector_store_ready and "source_documents" in response:
+                    source_docs = response["source_documents"]
+                    if source_docs:
+                        with st.expander("📚 Sources"):
+                            for i, doc in enumerate(source_docs):
+                                st.write(f"**Source {i+1}:**")
+                                st.write(doc.page_content[:200] + "...")
         
-        3. **Start chatting** with your personal AI assistant!
-        """)
+        # Add assistant response to chat
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+    
+    # Sample questions (when no documents are loaded)
+    if not st.session_state.vector_store_ready:
+        st.subheader("💡 Get Started")
+        st.info("Upload your personal documents (CV, projects, notes) in the sidebar to enable document-based Q&A!")
         
-        # Create data folder if it doesn't exist
-        if not os.path.exists(config.DATA_FOLDER):
-            if st.button("📁 Create Data Folder"):
-                os.makedirs(config.DATA_FOLDER, exist_ok=True)
-                st.success(f"Created {config.DATA_FOLDER} folder! Now add your documents there.")
+        st.subheader("🤖 Or chat directly:")
+        sample_questions = [
+            "Tell me about yourself",
+            "What can you help me with?",
+            "How do you work?"
+        ]
+        
+        cols = st.columns(len(sample_questions))
+        for i, question in enumerate(sample_questions):
+            if cols[i].button(question, key=f"sample_{i}"):
+                st.session_state.messages.append({"role": "user", "content": question})
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking..."):
+                        answer = st.session_state.chatbot_agent.chat_direct(question)
+                        st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.rerun()
 
 if __name__ == "__main__":

@@ -41,9 +41,9 @@ def test_free_embeddings():
 def test_free_chatbot_agent():
     print("\nTesting free chatbot agent...")
     try:
-        from chatbot_agent_free import FreePersonalChatbotAgent
+        from chatbot_agent import PersonalChatbotAgent
         
-        agent = FreePersonalChatbotAgent()
+        agent = PersonalChatbotAgent()
         if agent.is_ollama_available():
             print("✅ Ollama is available for chatbot agent")
             
@@ -88,7 +88,7 @@ def main():
     if all_passed:
         print("\n🎉 ALL TESTS PASSED!")
         print("Your free chatbot is ready to use!")
-        print("Run: streamlit run app_free.py")
+        print("Run: streamlit run app.py")
     else:
         print("\n❌ Some tests failed. Please check the errors above.")
     
