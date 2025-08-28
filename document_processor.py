@@ -21,7 +21,7 @@ from langchain.embeddings.base import Embeddings
 import config
 
 # Import suppression utility
-from suppress_chromadb import suppress_chromadb_output
+from utils.suppress_chromadb import suppress_chromadb_output
 
 # Import Chroma with suppression
 with suppress_chromadb_output():

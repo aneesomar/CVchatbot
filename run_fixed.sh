@@ -26,7 +26,7 @@ if [ -d "./vector_store" ] && [ "$(ls -A ./vector_store)" ]; then
     echo "✅ Vector store exists and has content"
 else
     echo "🔄 Rebuilding vector store with CV data..."
-    ./.venv/bin/python rebuild_vectorstore.py
+    ./.venv/bin/python utils/rebuild_vectorstore.py
 fi
 
 echo ""

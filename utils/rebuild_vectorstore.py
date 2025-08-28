@@ -6,6 +6,9 @@ import os
 import sys
 import shutil
 
+# Add parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Set environment variables
 os.environ.update({
     "ANONYMIZED_TELEMETRY": "False",

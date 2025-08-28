@@ -66,7 +66,7 @@ def load_documents_from_data_folder():
         # Try to load existing vector store first
         try:
             with st.spinner("Loading existing documents..."):
-                from suppress_chromadb import suppress_chromadb_output
+                from utils.suppress_chromadb import suppress_chromadb_output
                 
                 with suppress_chromadb_output():
                     vector_store = st.session_state.doc_processor.load_existing_vector_store()
@@ -96,7 +96,7 @@ def load_documents_from_data_folder():
         
         # Create vector store
         with st.spinner(f"Processing {len(documents)} documents from data folder..."):
-            from suppress_chromadb import suppress_chromadb_output
+            from utils.suppress_chromadb import suppress_chromadb_output
             
             with suppress_chromadb_output():
                 vector_store = st.session_state.doc_processor.create_vector_store(documents)
