@@ -1,7 +1,20 @@
 import streamlit as st
 import os
 from pathlib import Path
-import tempfile
+
+# Apply ChromaDB telemetry patch first
+try:
+    import sys
+    from unittest.mock import MagicMock
+    sys.modules['posthog'] = MagicMock()
+except:
+    pass
+
+# Suppress warnings
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Import our modules
 from document_processor import DocumentProcessor
@@ -26,6 +39,8 @@ def initialize_session_state():
         st.session_state.chatbot_agent = PersonalChatbotAgent()
     if "vector_store_ready" not in st.session_state:
         st.session_state.vector_store_ready = False
+        # Try to automatically load documents from data folder on startup
+        load_documents_from_data_folder()
 
 def check_ollama_status():
     """Check if Ollama is running and display status"""
@@ -38,98 +53,110 @@ def check_ollama_status():
         st.info("Run: `ollama serve` in terminal to start Ollama")
         return False
 
-def process_documents(uploaded_files):
-    """Process uploaded documents and create vector store"""
-    if not uploaded_files:
-        return False
-    
-    with st.spinner("Processing documents..."):
-        documents = []
+def load_documents_from_data_folder():
+    """Automatically load and process documents from the data folder"""
+    try:
+        # Check if data folder exists
+        if not os.path.exists(config.DATA_FOLDER):
+            st.info(f"📁 Creating data folder: {config.DATA_FOLDER}")
+            os.makedirs(config.DATA_FOLDER, exist_ok=True)
+            st.info("Please add your documents to the data folder and click 'Refresh Documents'")
+            return False
         
-        for uploaded_file in uploaded_files:
-            try:
-                # Save uploaded file temporarily
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-                    tmp_file.write(uploaded_file.read())
-                    tmp_file_path = tmp_file.name
+        # Try to load existing vector store first
+        try:
+            with st.spinner("Loading existing documents..."):
+                from suppress_chromadb import suppress_chromadb_output
                 
-                # Process based on file type
-                if uploaded_file.name.endswith('.pdf'):
-                    docs = st.session_state.doc_processor.load_pdf(tmp_file_path)
-                elif uploaded_file.name.endswith('.docx'):
-                    docs = st.session_state.doc_processor.load_docx(tmp_file_path)
-                elif uploaded_file.name.endswith('.txt'):
-                    docs = st.session_state.doc_processor.load_text_file(tmp_file_path)
-                else:
-                    st.warning(f"Unsupported file type: {uploaded_file.name}")
-                    continue
+                with suppress_chromadb_output():
+                    vector_store = st.session_state.doc_processor.load_existing_vector_store()
                 
-                documents.extend(docs)
-                
-                # Clean up temp file
-                os.unlink(tmp_file_path)
-                
-                st.success(f"✅ Processed {uploaded_file.name}")
-                
-            except Exception as e:
-                st.error(f"Error processing {uploaded_file.name}: {str(e)}")
-                continue
+                if vector_store:
+                    # Check if vector store has content
+                    collection = vector_store._collection
+                    count = collection.count()
+                    
+                    if count > 0:
+                        retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+                        st.session_state.chatbot_agent = PersonalChatbotAgent(vector_store_retriever=retriever)
+                        st.session_state.vector_store_ready = True
+                        st.success(f"✅ Loaded existing vector store with {count} document chunks")
+                        return True
+                    else:
+                        st.info("Existing vector store is empty, processing documents...")
+        except Exception as e:
+            st.info(f"Could not load existing vector store ({str(e)}), processing documents...")
         
-        if documents:
-            # Create vector store (this will use local embeddings, no API calls)
-            try:
-                vector_store = st.session_state.doc_processor.create_vector_store_free(documents)
+        # Process documents from data folder
+        documents = st.session_state.doc_processor.process_documents(config.DATA_FOLDER)
+        
+        if not documents:
+            st.info(f"📁 No documents found in {config.DATA_FOLDER}. Add some documents and click 'Refresh Documents'")
+            return False
+        
+        # Create vector store
+        with st.spinner(f"Processing {len(documents)} documents from data folder..."):
+            from suppress_chromadb import suppress_chromadb_output
+            
+            with suppress_chromadb_output():
+                vector_store = st.session_state.doc_processor.create_vector_store(documents)
+            
+            if vector_store:
                 retriever = vector_store.as_retriever(search_kwargs={"k": 3})
-                
-                # Update chatbot agent with new retriever
                 st.session_state.chatbot_agent = PersonalChatbotAgent(vector_store_retriever=retriever)
                 st.session_state.vector_store_ready = True
-                
                 st.success(f"✅ Successfully processed {len(documents)} documents!")
                 return True
-                
-            except Exception as e:
-                st.error(f"Error creating vector store: {str(e)}")
+            else:
+                st.error("Failed to create vector store")
                 return False
-        
+                
+    except Exception as e:
+        st.error(f"Error loading documents: {str(e)}")
         return False
 
 def main():
-    st.title("🤖 Free Personal Chatbot")
-    st.markdown("**Powered by Ollama (100% Free & Local)**")
+    st.title("🤖 Anees's Personal AI Assistant (FREE)")
+    st.markdown("**Powered by Ollama (100% Free & Local) • Trained on Data Folder**")
     
     # Initialize session state
     initialize_session_state()
     
     # Sidebar
     with st.sidebar:
-        st.header("📄 Document Management")
+        st.header("� Document Management")
         
         # Check Ollama status
         ollama_available = check_ollama_status()
         
-        # File upload
-        uploaded_files = st.file_uploader(
-            "Upload your documents",
-            type=["pdf", "docx", "txt"],
-            accept_multiple_files=True,
-            help="Upload PDF, DOCX, or TXT files containing information about you"
-        )
+        # Data folder info
+        data_folder_exists = os.path.exists(config.DATA_FOLDER)
+        if data_folder_exists:
+            file_count = sum([len(files) for r, d, files in os.walk(config.DATA_FOLDER)])
+            st.info(f"📊 Data folder: {file_count} files found")
+        else:
+            st.warning(f"📁 Data folder not found: {config.DATA_FOLDER}")
         
-        if st.button("Process Documents") and ollama_available:
-            if uploaded_files:
-                success = process_documents(uploaded_files)
-                if success:
-                    st.rerun()
-            else:
-                st.warning("Please upload some documents first")
+        # Refresh documents button
+        if st.button("🔄 Refresh Documents", help="Reprocess documents from data folder") and ollama_available:
+            success = load_documents_from_data_folder()
+            if success:
+                st.rerun()
+        
+        # Instructions
+        st.subheader("📋 Instructions")
+        st.markdown(f"""
+        1. Add your documents to: `{config.DATA_FOLDER}`
+        2. Supported formats: PDF, DOCX, TXT, MD, PY, JS, HTML, CSS, JSON
+        3. Click **Refresh Documents** to process new files
+        """)
         
         # Status
         st.subheader("📊 Status")
         if st.session_state.vector_store_ready:
             st.success("✅ Documents ready for questions")
         else:
-            st.info("📤 Upload documents to enable Q&A")
+            st.info("📤 Add documents to data folder and refresh")
         
         # Clear conversation
         if st.button("🗑️ Clear Conversation"):
@@ -156,7 +183,7 @@ def main():
             st.markdown(message["content"])
     
     # Chat input
-    if prompt := st.chat_input("Ask me anything about the uploaded documents..."):
+    if prompt := st.chat_input("Ask me anything about Anees..."):
         # Add user message to chat
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -186,10 +213,10 @@ def main():
         # Add assistant response to chat
         st.session_state.messages.append({"role": "assistant", "content": answer})
     
-    # Sample questions (when no documents are loaded)
+    # Sample questions
     if not st.session_state.vector_store_ready:
         st.subheader("💡 Get Started")
-        st.info("Upload your personal documents (CV, projects, notes) in the sidebar to enable document-based Q&A!")
+        st.info(f"Add your personal documents to the `{config.DATA_FOLDER}` folder and click 'Refresh Documents' in the sidebar to enable document-based Q&A!")
         
         st.subheader("🤖 Or chat directly:")
         sample_questions = [
@@ -197,17 +224,32 @@ def main():
             "What can you help me with?",
             "How do you work?"
         ]
-        
-        cols = st.columns(len(sample_questions))
-        for i, question in enumerate(sample_questions):
-            if cols[i].button(question, key=f"sample_{i}"):
-                st.session_state.messages.append({"role": "user", "content": question})
-                with st.chat_message("assistant"):
-                    with st.spinner("Thinking..."):
+    else:
+        st.subheader("💡 Sample Questions About Anees")
+        sample_questions = [
+            "What is Anees's educational background?",
+            "What programming languages does Anees know?",
+            "Tell me about Anees's work experience",
+            "What projects has Anees worked on?",
+            "What are Anees's technical skills?",
+            "What is Anees's contact information?"
+        ]
+    
+    cols = st.columns(min(3, len(sample_questions)))  # Max 3 columns
+    for i, question in enumerate(sample_questions):
+        col_idx = i % len(cols)
+        if cols[col_idx].button(question, key=f"sample_{i}"):
+            st.session_state.messages.append({"role": "user", "content": question})
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    if st.session_state.vector_store_ready:
+                        response = st.session_state.chatbot_agent.ask(question)
+                        answer = response["answer"]
+                    else:
                         answer = st.session_state.chatbot_agent.chat_direct(question)
-                        st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                st.rerun()
+                    st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.rerun()
 
 if __name__ == "__main__":
     main()

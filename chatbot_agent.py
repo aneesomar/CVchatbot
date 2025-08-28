@@ -4,6 +4,15 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.schema import BaseRetriever
 from langchain.llms.base import LLM
+
+# Patch ChromaDB telemetry before importing config
+try:
+    import sys
+    from unittest.mock import MagicMock
+    sys.modules['posthog'] = MagicMock()
+except:
+    pass
+
 import config
 import ollama
 import requests

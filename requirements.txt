@@ -14,3 +14,4 @@ rich<14
 tenacity<9
 anyio<4
 importlib-metadata<7
+torch>=2.0.0,<3.0.0

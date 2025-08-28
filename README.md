@@ -25,15 +25,18 @@ pip install -r requirements.txt
    - `code_snippets/` - Code examples
    - `blog_posts/` - Blog posts or articles
 
-4. **Run the application**:
+4. **Run the application** (it will automatically process your data folder):
 ```bash
 streamlit run app.py
 ```
 
+5. **Refresh documents** when you add new files using the "Refresh Documents" button in the sidebar.
+
 ## Features
 
 - 🆓 **Completely FREE** - Uses local Ollama model and sentence-transformers
-- 🧠 Context-aware responses based on personal data
+- � **Automatic Training** - Automatically processes documents from `data/` folder on startup
+- �🧠 Context-aware responses based on personal data
 - 📚 Document ingestion and vector storage (ChromaDB)
 - 💬 Conversational interface with memory
 - 🎭 Personality-aware responses

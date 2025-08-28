@@ -4,20 +4,41 @@ from typing import List, Dict
 import PyPDF2
 import docx
 import numpy as np
+
+# Patch ChromaDB telemetry before importing sentence transformers
+try:
+    import sys
+    from unittest.mock import MagicMock
+    sys.modules['posthog'] = MagicMock()
+except:
+    pass
+
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import TextLoader, DirectoryLoader
 from langchain.schema import Document
-from langchain.vectorstores import Chroma
 from langchain.embeddings.base import Embeddings
 import config
+
+# Import suppression utility
+from suppress_chromadb import suppress_chromadb_output
+
+# Import Chroma with suppression
+with suppress_chromadb_output():
+    from langchain.vectorstores import Chroma
 
 class LocalEmbeddings(Embeddings):
     """Free local embeddings using sentence-transformers (CPU only)"""
     
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         # Force CPU usage to avoid CUDA compatibility issues
+        import torch
+        torch.set_num_threads(1)  # Prevent threading issues
+        
         self.model = SentenceTransformer(model_name, device='cpu')
+        # Disable torch warnings
+        import warnings
+        warnings.filterwarnings("ignore", category=UserWarning, module="torch")
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs."""
@@ -72,9 +93,6 @@ class DocumentProcessor:
         except Exception as e:
             st.error(f"Error reading text file {file_path}: {str(e)}")
             return []
-        except Exception as e:
-            st.error(f"Error reading text file {file_path}: {str(e)}")
-            return ""
     
     def process_documents(self, data_folder: str) -> List[Document]:
         """Process all documents in the data folder."""
@@ -91,24 +109,20 @@ class DocumentProcessor:
                 file_path = os.path.join(root, file)
                 file_ext = os.path.splitext(file)[1].lower()
                 
-                text_content = ""
-                metadata = {"source": file_path, "filename": file}
+                docs = []
                 
                 # Process different file types
                 if file_ext == '.pdf':
-                    text_content = self.load_pdf(file_path)
-                    metadata["type"] = "PDF"
+                    docs = self.load_pdf(file_path)
                 elif file_ext == '.docx':
-                    text_content = self.load_docx(file_path)
-                    metadata["type"] = "Word Document"
+                    docs = self.load_docx(file_path)
                 elif file_ext in ['.txt', '.md', '.py', '.js', '.html', '.css', '.json']:
-                    text_content = self.load_text_file(file_path)
-                    metadata["type"] = "Text File"
+                    docs = self.load_text_file(file_path)
                 
-                if text_content.strip():
-                    # Create document object
-                    doc = Document(page_content=text_content, metadata=metadata)
-                    documents.append(doc)
+                # Add processed documents
+                if docs:
+                    documents.extend(docs)
+                    print(f"✅ Processed {file}: {len(docs)} documents")
         
         return documents
     
@@ -123,25 +137,28 @@ class DocumentProcessor:
         
         st.info(f"Processing {len(split_documents)} document chunks with free local embeddings...")
         
-        # Create vector store with local embeddings
-        vector_store = Chroma.from_documents(
-            documents=split_documents,
-            embedding=self.embeddings,
-            collection_name=config.COLLECTION_NAME,
-            persist_directory=config.VECTOR_STORE_PATH
-        )
+        # Create vector store with local embeddings (suppress telemetry)
+        with suppress_chromadb_output():
+            vector_store = Chroma.from_documents(
+                documents=split_documents,
+                embedding=self.embeddings,
+                collection_name=config.COLLECTION_NAME,
+                persist_directory=config.VECTOR_STORE_PATH
+            )
+            
+            vector_store.persist()
         
-        vector_store.persist()
         return vector_store
     
     def load_existing_vector_store(self) -> Chroma:
         """Load existing vector store if it exists."""
         try:
-            vector_store = Chroma(
-                collection_name=config.COLLECTION_NAME,
-                embedding_function=self.embeddings,
-                persist_directory=config.VECTOR_STORE_PATH
-            )
+            with suppress_chromadb_output():
+                vector_store = Chroma(
+                    collection_name=config.COLLECTION_NAME,
+                    embedding_function=self.embeddings,
+                    persist_directory=config.VECTOR_STORE_PATH
+                )
             return vector_store
         except Exception as e:
             st.error(f"Error loading vector store: {str(e)}")

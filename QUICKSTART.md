@@ -1,23 +1,24 @@
-# 🤖 Personal Context-Aware Chatbot - Quick Start Guide
+# 🤖 Personal Context-Aware Chatbot - Quick Start Guide (FREE VERSION)
 
 ## Overview
-Your personal AI assistant that knows everything about you! This chatbot uses your CV, projects, code snippets, and personal notes to answer questions about your background, skills, and experience.
+Your personal AI assistant that knows everything about you! This chatbot uses your CV, projects, code snippets, and personal notes to answer questions about your background, skills, and experience. **Completely FREE** using local Ollama models!
 
 ## 🚀 Quick Start (5 minutes)
 
-### 1. Set up your OpenAI API key
+### 1. Install Ollama (Free Local AI)
 ```bash
-# Edit the .env file
-nano .env
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
 
-# Replace this line:
-OPENAI_API_KEY=your_openai_api_key_here
+# Pull the lightweight model
+ollama pull llama3.2:1b
 
-# With your actual API key:
-OPENAI_API_KEY=sk-your-actual-openai-key
+# Start Ollama server
+ollama serve
 ```
 
-### 2. Add your personal documents
+### 2. Add your personal documents to the data folder
+The app will **automatically** process any documents you add to the `data/` folder!
 ```bash
 # Your documents go in the data/ folder:
 data/
