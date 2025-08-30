@@ -35,10 +35,12 @@ def initialize_session_state():
         st.session_state.messages = []
     if "doc_processor" not in st.session_state:
         st.session_state.doc_processor = DocumentProcessor()
-    if "chatbot_agent" not in st.session_state:
-        st.session_state.chatbot_agent = PersonalChatbotAgent()
+    if "personality_mode" not in st.session_state:
+        st.session_state.personality_mode = config.DEFAULT_PERSONALITY_MODE
     if "vector_store_ready" not in st.session_state:
         st.session_state.vector_store_ready = False
+    if "chatbot_agent" not in st.session_state:
+        st.session_state.chatbot_agent = PersonalChatbotAgent(personality_mode=config.DEFAULT_PERSONALITY_MODE)
         # Try to automatically load documents from data folder on startup
         load_documents_from_data_folder()
 
@@ -78,7 +80,16 @@ def load_documents_from_data_folder():
                     
                     if count > 0:
                         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
-                        st.session_state.chatbot_agent = PersonalChatbotAgent(vector_store_retriever=retriever)
+                        # Update existing chatbot agent with new retriever
+                        if hasattr(st.session_state, "chatbot_agent") and st.session_state.chatbot_agent:
+                            st.session_state.chatbot_agent.update_retriever(retriever)
+                        else:
+                            # Get personality mode safely
+                            personality_mode = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+                            st.session_state.chatbot_agent = PersonalChatbotAgent(
+                                vector_store_retriever=retriever, 
+                                personality_mode=personality_mode
+                            )
                         st.session_state.vector_store_ready = True
                         st.success(f"✅ Loaded existing vector store with {count} document chunks")
                         return True
@@ -103,7 +114,16 @@ def load_documents_from_data_folder():
             
             if vector_store:
                 retriever = vector_store.as_retriever(search_kwargs={"k": 3})
-                st.session_state.chatbot_agent = PersonalChatbotAgent(vector_store_retriever=retriever)
+                # Update existing chatbot agent with new retriever
+                if hasattr(st.session_state, "chatbot_agent") and st.session_state.chatbot_agent:
+                    st.session_state.chatbot_agent.update_retriever(retriever)
+                else:
+                    # Get personality mode safely
+                    personality_mode = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+                    st.session_state.chatbot_agent = PersonalChatbotAgent(
+                        vector_store_retriever=retriever, 
+                        personality_mode=personality_mode
+                    )
                 st.session_state.vector_store_ready = True
                 st.success(f"✅ Successfully processed {len(documents)} documents!")
                 return True
@@ -116,11 +136,15 @@ def load_documents_from_data_folder():
         return False
 
 def main():
-    st.title("🤖 Anees's Personal AI Assistant (FREE)")
-    st.markdown("**Powered by Ollama (100% Free & Local) • Trained on Data Folder**")
-    
-    # Initialize session state
+    # Initialize session state first
     initialize_session_state()
+    
+    st.title("🤖 Anees's Personal AI Assistant (FREE)")
+    
+    # Display current mode in subtitle (with fallback)
+    current_mode_key = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+    current_mode = config.PERSONALITY_MODES[current_mode_key]
+    st.markdown(f"**Powered by Ollama (100% Free & Local) • Mode: {current_mode['name']}**")
     
     # Sidebar
     with st.sidebar:
@@ -143,6 +167,36 @@ def main():
             if success:
                 st.rerun()
         
+        # Personality Mode Selector
+        st.subheader("🎭 Personality Mode")
+        mode_options = {}
+        for key, value in config.PERSONALITY_MODES.items():
+            mode_options[value["name"]] = key
+        
+        current_mode_key = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+        current_mode_info = config.PERSONALITY_MODES[current_mode_key]
+        
+        selected_mode_name = st.selectbox(
+            "Choose response style:",
+            options=list(mode_options.keys()),
+            index=list(mode_options.keys()).index(current_mode_info["name"]),
+            help="Different modes change how Anees responds to your questions"
+        )
+        
+        selected_mode_key = mode_options[selected_mode_name]
+        
+        # Show mode description
+        st.info(f"📝 {config.PERSONALITY_MODES[selected_mode_key]['description']}")
+        
+        # Update personality mode if changed
+        if selected_mode_key != current_mode_key:
+            st.session_state.personality_mode = selected_mode_key
+            if hasattr(st.session_state, "chatbot_agent") and st.session_state.chatbot_agent:
+                success = st.session_state.chatbot_agent.set_personality_mode(selected_mode_key)
+                if success:
+                    st.success(f"✨ Switched to {selected_mode_name}")
+                    st.rerun()
+        
         # Instructions
         st.subheader("📋 Instructions")
         st.markdown(f"""
@@ -157,6 +211,11 @@ def main():
             st.success("✅ Documents ready for questions")
         else:
             st.info("📤 Add documents to data folder and refresh")
+        
+        # Current mode display
+        current_mode_key = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+        current_mode = config.PERSONALITY_MODES[current_mode_key]
+        st.info(f"🎭 Current mode: **{current_mode['name']}**")
         
         # Clear conversation
         if st.button("🗑️ Clear Conversation"):
@@ -192,23 +251,22 @@ def main():
         # Generate response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                if st.session_state.vector_store_ready:
-                    response = st.session_state.chatbot_agent.ask(prompt)
-                    answer = response["answer"]
-                else:
-                    # Use direct chat without documents
-                    answer = st.session_state.chatbot_agent.chat_direct(prompt)
+                response = st.session_state.chatbot_agent.ask(prompt)
+                answer = response["answer"]
+                
+                # Add context about document availability
+                if not st.session_state.vector_store_ready and "source_documents" not in response:
+                    answer += "\n\n*Note: I'm responding based on my general knowledge. Add documents to the data folder and refresh for personalized answers about Anees.*"
                 
                 st.markdown(answer)
                 
                 # Show source documents if available
-                if st.session_state.vector_store_ready and "source_documents" in response:
+                if st.session_state.vector_store_ready and "source_documents" in response and response["source_documents"]:
                     source_docs = response["source_documents"]
-                    if source_docs:
-                        with st.expander("📚 Sources"):
-                            for i, doc in enumerate(source_docs):
-                                st.write(f"**Source {i+1}:**")
-                                st.write(doc.page_content[:200] + "...")
+                    with st.expander("📚 Sources"):
+                        for i, doc in enumerate(source_docs):
+                            st.write(f"**Source {i+1}:**")
+                            st.write(doc.page_content[:200] + "...")
         
         # Add assistant response to chat
         st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -225,15 +283,64 @@ def main():
             "How do you work?"
         ]
     else:
-        st.subheader("💡 Sample Questions About Anees")
-        sample_questions = [
+        current_mode_key = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
+        current_mode = config.PERSONALITY_MODES[current_mode_key]
+        st.subheader(f"💡 Sample Questions ({current_mode['name']})")
+        
+        # Mode-specific sample questions
+        mode_questions = {
+            "interview": [
+                "What is your educational background?",
+                "What are your key technical skills?",
+                "What is your most significant project?",
+                "What programming languages do you know?",
+                "Tell me about your work experience"
+            ],
+            "storytelling": [
+                "Tell me the story of your career journey",
+                "What challenges have you overcome in your projects?",
+                "How did you discover your passion for programming?",
+                "What's the most interesting project you've worked on and why?",
+                "What lessons have you learned throughout your career?"
+            ],
+            "fast_facts": [
+                "Quick overview of your skills",
+                "Your education and certifications",
+                "Key projects - bullet points",
+                "Programming languages and tech stack",
+                "Work experience summary"
+            ],
+            "humble_brag": [
+                "What are you most proud of in your career?",
+                "What makes you stand out as a developer?",
+                "What's your greatest technical achievement?",
+                "Tell me about your most successful projects",
+                "What unique value do you bring to teams?"
+            ],
+            "mentor": [
+                "What advice would you give to new developers?",
+                "What have you learned from your career challenges?",
+                "How do you approach learning new technologies?",
+                "What would you tell someone starting their career?",
+                "What insights can you share from your experience?"
+            ],
+            "technical": [
+                "Explain your most complex technical project",
+                "What architectures have you worked with?",
+                "Detail your development methodology",
+                "What technical problems have you solved?",
+                "Describe your technology stack expertise"
+            ]
+        }
+        
+        sample_questions = mode_questions.get(current_mode_key, [
             "What is Anees's educational background?",
             "What programming languages does Anees know?",
             "Tell me about Anees's work experience",
             "What projects has Anees worked on?",
             "What are Anees's technical skills?",
             "What is Anees's contact information?"
-        ]
+        ])
     
     cols = st.columns(min(3, len(sample_questions)))  # Max 3 columns
     for i, question in enumerate(sample_questions):
@@ -242,11 +349,13 @@ def main():
             st.session_state.messages.append({"role": "user", "content": question})
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    if st.session_state.vector_store_ready:
-                        response = st.session_state.chatbot_agent.ask(question)
-                        answer = response["answer"]
-                    else:
-                        answer = st.session_state.chatbot_agent.chat_direct(question)
+                    response = st.session_state.chatbot_agent.ask(question)
+                    answer = response["answer"]
+                    
+                    # Add context about document availability
+                    if not st.session_state.vector_store_ready and "source_documents" not in response:
+                        answer += "\n\n*Note: I'm responding based on my general knowledge. Add documents to the data folder and refresh for personalized answers about Anees.*"
+                    
                     st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()

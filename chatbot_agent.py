@@ -46,9 +46,12 @@ class OllamaLLM(LLM):
         return {"model_name": self.model_name, "base_url": self.base_url}
 
 class PersonalChatbotAgent:
-    def __init__(self, vector_store_retriever: Optional[BaseRetriever] = None):
+    def __init__(self, vector_store_retriever: Optional[BaseRetriever] = None, personality_mode: str = None):
         # Use free local Ollama model
         self.llm = OllamaLLM()
+        
+        # Set personality mode
+        self.personality_mode = personality_mode or config.DEFAULT_PERSONALITY_MODE
         
         self.memory = ConversationBufferMemory(
             memory_key="chat_history",
@@ -59,38 +62,76 @@ class PersonalChatbotAgent:
         self.retriever = vector_store_retriever
         
         # Create the conversational chain if we have a retriever
-        if self.retriever:
-            self.chain = ConversationalRetrievalChain.from_llm(
-                llm=self.llm,
-                retriever=self.retriever,
-                memory=self.memory,
-                return_source_documents=True,
-                combine_docs_chain_kwargs={
-                    "prompt": PromptTemplate(
-                        input_variables=["context", "question"],
-                        template=f"""{config.PERSONALITY_PROMPT}
+        self.chain = self._create_chain()
+    
+    def _create_chain(self):
+        """Create or recreate the conversational chain with current personality mode"""
+        if not self.retriever:
+            return None
+            
+        personality_prompt = config.PERSONALITY_MODES[self.personality_mode]["prompt"]
+        
+        return ConversationalRetrievalChain.from_llm(
+            llm=self.llm,
+            retriever=self.retriever,
+            memory=self.memory,
+            return_source_documents=True,
+            combine_docs_chain_kwargs={
+                "prompt": PromptTemplate(
+                    input_variables=["context", "question"],
+                    template=f"""{personality_prompt}
 
 Context from Anees's documents:
 {{context}}
 
 Question: {{question}}
 
-Instructions: Use the context above to answer as Anees Omar. If the context contains relevant information, provide a complete answer using that information and do not add any disclaimers. Only if the context is empty or completely irrelevant should you mention not having the information.
+Instructions: Use the context above to answer as Anees Omar in {config.PERSONALITY_MODES[self.personality_mode]["name"]}. If the context contains relevant information, provide a complete answer using that information and do not add any disclaimers. Only if the context is empty or completely irrelevant should you mention not having the information.
 
 Answer:"""
-                    )
-                }
-            )
-        else:
-            self.chain = None
+                )
+            }
+        )
+    
+    def set_personality_mode(self, mode: str):
+        """Change the personality mode and recreate the chain"""
+        if mode in config.PERSONALITY_MODES:
+            self.personality_mode = mode
+            self.chain = self._create_chain()
+            return True
+        return False
+    
+    def update_retriever(self, vector_store_retriever: Optional[BaseRetriever]):
+        """Update the retriever and recreate the chain"""
+        self.retriever = vector_store_retriever
+        self.chain = self._create_chain()
+    
+    def get_current_mode(self) -> Dict[str, str]:
+        """Get information about the current personality mode"""
+        if self.personality_mode in config.PERSONALITY_MODES:
+            mode_info = config.PERSONALITY_MODES[self.personality_mode]
+            return {
+                "mode": self.personality_mode,
+                "name": mode_info["name"],
+                "description": mode_info["description"]
+            }
+        return None
     
     def ask(self, question: str) -> Dict[str, Any]:
         """Ask a question and get a response"""
         if not self.chain:
-            return {
-                "answer": "I need access to your documents to answer questions. Please upload some documents first.",
-                "source_documents": []
-            }
+            # Fallback to direct chat without documents
+            try:
+                answer = self.chat_direct(question)
+                return {
+                    "answer": answer,
+                    "source_documents": []
+                }
+            except Exception as e:
+                return {
+                    "answer": f"I encountered an error: {str(e)}",
+                    "source_documents": []
+                }
         
         try:
             response = self.chain({"question": question})
@@ -107,7 +148,8 @@ Answer:"""
     def chat_direct(self, message: str) -> str:
         """Direct chat without document context (useful when no documents are loaded)"""
         try:
-            prompt = f"{config.PERSONALITY_PROMPT}\n\nUser: {message}\n\nAssistant:"
+            personality_prompt = config.PERSONALITY_MODES[self.personality_mode]["prompt"]
+            prompt = f"{personality_prompt}\n\nUser: {message}\n\nAssistant:"
             return self.llm._call(prompt)
         except Exception as e:
             return f"I encountered an error: {str(e)}"
