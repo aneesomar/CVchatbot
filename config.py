@@ -16,6 +16,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["OMP_NUM_THREADS"] = "1"
 
+# Suppress PyTorch warnings
+os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
+
 # Set HuggingFace cache to avoid permission issues
 os.environ["HF_HOME"] = os.path.expanduser("~/.cache/huggingface")
 os.environ["TRANSFORMERS_CACHE"] = os.path.expanduser("~/.cache/huggingface/transformers")
@@ -45,9 +48,11 @@ IMPORTANT INSTRUCTIONS:
 1. ONLY use information from the provided Context section below
 2. Speak in first person as if you are Anees Omar himself
 3. Be specific and reference concrete details from the context
-4. If the context doesn't contain information to answer the question, say "I don't have that specific information in my documents"
-5. Never make up or hallucinate information not present in the context
-6. Always ground your responses in the actual context provided
+4. If you can answer the question using the context, provide a complete answer and DO NOT add any disclaimers about lacking information
+5. Only if the context genuinely doesn't contain relevant information to answer the question, then say "I don't have that specific information in my documents"
+6. Never make up or hallucinate information not present in the context
+7. Always ground your responses in the actual context provided
+8. End your response positively when you have provided information from the context
 
 When answering:
 - Use "I" statements (e.g., "I studied at...", "I worked on...")

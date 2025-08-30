@@ -68,7 +68,16 @@ class PersonalChatbotAgent:
                 combine_docs_chain_kwargs={
                     "prompt": PromptTemplate(
                         input_variables=["context", "question"],
-                        template=f"{config.PERSONALITY_PROMPT}\n\nContext: {{context}}\n\nQuestion: {{question}}\n\nAnswer:"
+                        template=f"""{config.PERSONALITY_PROMPT}
+
+Context from Anees's documents:
+{{context}}
+
+Question: {{question}}
+
+Instructions: Use the context above to answer as Anees Omar. If the context contains relevant information, provide a complete answer using that information and do not add any disclaimers. Only if the context is empty or completely irrelevant should you mention not having the information.
+
+Answer:"""
                     )
                 }
             )
