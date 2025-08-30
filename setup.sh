@@ -1,44 +1,38 @@
 #!/bin/bash
+# Personal Chatbot Setup Script
 
-# Setup script for Personal Chatbot
-echo "🤖 Setting up your Personal Chatbot..."
+echo "🤖 Setting up Personal AI Chatbot..."
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "📝 Creating .env file..."
-    cp .env.example .env
-    echo "⚠️  Please edit .env and add your OpenAI API key!"
-else
-    echo "✅ .env file already exists"
+# Check if virtual environment exists
+if [ ! -d ".venv" ]; then
+    echo "📦 Creating virtual environment..."
+    python3 -m venv .venv
 fi
 
-# Create data folder if it doesn't exist
-if [ ! -d "data" ]; then
-    echo "📁 Creating data folder..."
-    mkdir -p data
-    mkdir -p data/code_snippets
-    echo "✅ Data folder created"
+# Activate virtual environment
+echo "🔄 Activating virtual environment..."
+source .venv/bin/activate
+
+# Install dependencies
+echo "📥 Installing dependencies..."
+pip install -r requirements.txt
+
+# Check if Ollama is installed
+if ! command -v ollama &> /dev/null; then
+    echo "⚠️  Ollama is not installed. Please install it:"
+    echo "   curl -fsSL https://ollama.ai/install.sh | sh"
+    echo "   ollama pull llama3.2:1b"
 else
-    echo "✅ Data folder already exists"
+    echo "✅ Ollama is installed"
+    
+    # Check if the model is pulled
+    if ollama list | grep -q "llama3.2:1b"; then
+        echo "✅ Model llama3.2:1b is available"
+    else
+        echo "📥 Pulling llama3.2:1b model..."
+        ollama pull llama3.2:1b
+    fi
 fi
 
-# Check if vector store exists
-if [ -d "vector_store" ]; then
-    echo "🗄️  Vector store found"
-else
-    echo "🗄️  Vector store will be created on first run"
-fi
-
-echo ""
-echo "🚀 Setup complete! Next steps:"
-echo "1. Edit .env and add your OpenAI API key"
-echo "2. Add your personal documents to the data/ folder"
-echo "3. Run: streamlit run app.py"
-echo ""
-echo "📚 Document types supported:"
-echo "   - PDF files (CV, documents)"
-echo "   - Word documents (.docx)"
-echo "   - Text files (.txt, .md)"
-echo "   - Code files (.py, .js, .html, .css, .json)"
-echo ""
-echo "💡 Sample documents have been created in data/ - replace them with your own!"
+echo "🚀 Setup complete! Run the app with:"
+echo "   source .venv/bin/activate && streamlit run app.py"
