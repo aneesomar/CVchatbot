@@ -15,7 +15,7 @@ except:
 
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import TextLoader, DirectoryLoader
+from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain.schema import Document
 from langchain.embeddings.base import Embeddings
 import config
@@ -25,7 +25,7 @@ from utils.suppress_chromadb import suppress_chromadb_output
 
 # Import Chroma with suppression
 with suppress_chromadb_output():
-    from langchain.vectorstores import Chroma
+    from langchain_community.vectorstores import Chroma
 
 class LocalEmbeddings(Embeddings):
     """Free local embeddings using sentence-transformers (CPU only)"""
@@ -146,7 +146,8 @@ class DocumentProcessor:
                 persist_directory=config.VECTOR_STORE_PATH
             )
             
-            vector_store.persist()
+            # Note: vector_store.persist() is deprecated in Chroma 0.4.x
+            # Documents are automatically persisted
         
         return vector_store
     

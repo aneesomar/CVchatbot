@@ -23,7 +23,7 @@ import config
 
 # Page configuration
 st.set_page_config(
-    page_title="Anees's Personal AI Assistant (FREE)",
+    page_title="Anees's Personal AI Assistant (OpenAI)",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -44,15 +44,22 @@ def initialize_session_state():
         # Try to automatically load documents from data folder on startup
         load_documents_from_data_folder()
 
-def check_ollama_status():
-    """Check if Ollama is running and display status"""
-    agent = PersonalChatbotAgent()
-    if agent.is_ollama_available():
-        st.success(f"✅ Ollama is running with model: {config.OLLAMA_MODEL}")
-        return True
-    else:
-        st.error("❌ Ollama is not available. Please make sure Ollama is running.")
-        st.info("Run: `ollama serve` in terminal to start Ollama")
+def check_openai_status():
+    """Check if OpenAI API is available and display status"""
+    try:
+        agent = PersonalChatbotAgent()
+        if agent.is_openai_available():
+            st.success(f"✅ OpenAI API is available with model: {config.OPENAI_MODEL}")
+            return True
+        else:
+            st.error("❌ OpenAI API is not available. Please check your API key.")
+            return False
+    except ValueError as e:
+        st.error(f"❌ {str(e)}")
+        st.info("Please set your OPENAI_API_KEY environment variable or add it to a .env file")
+        return False
+    except Exception as e:
+        st.error(f"❌ Error connecting to OpenAI API: {str(e)}")
         return False
 
 def load_documents_from_data_folder():
@@ -139,19 +146,19 @@ def main():
     # Initialize session state first
     initialize_session_state()
     
-    st.title("🤖 Anees's Personal AI Assistant (FREE)")
+    st.title("🤖 Anees's Personal AI Assistant")
     
     # Display current mode in subtitle (with fallback)
     current_mode_key = getattr(st.session_state, 'personality_mode', config.DEFAULT_PERSONALITY_MODE)
     current_mode = config.PERSONALITY_MODES[current_mode_key]
-    st.markdown(f"**Powered by Ollama (100% Free & Local) • Mode: {current_mode['name']}**")
+    st.markdown(f"**Powered by OpenAI {config.OPENAI_MODEL} • Mode: {current_mode['name']}**")
     
     # Sidebar
     with st.sidebar:
         st.header("� Document Management")
         
         # Check Ollama status
-        ollama_available = check_ollama_status()
+        openai_available = check_openai_status()
         
         # Data folder info
         data_folder_exists = os.path.exists(config.DATA_FOLDER)
@@ -162,7 +169,7 @@ def main():
             st.warning(f"📁 Data folder not found: {config.DATA_FOLDER}")
         
         # Refresh documents button
-        if st.button("🔄 Refresh Documents", help="Reprocess documents from data folder") and ollama_available:
+        if st.button("🔄 Refresh Documents", help="Reprocess documents from data folder") and openai_available:
             success = load_documents_from_data_folder()
             if success:
                 st.rerun()
@@ -226,14 +233,14 @@ def main():
         
         # Model info
         st.subheader("🔧 Model Info")
-        st.info(f"**Model**: {config.OLLAMA_MODEL}")
-        st.info("**Cost**: 100% Free")
-        st.info("**Privacy**: Runs locally")
+        st.info(f"**Model**: {config.OPENAI_MODEL}")
+        st.info("**Cost**: Pay per usage")
+        st.info("**Privacy**: OpenAI API")
     
     # Main chat interface
-    if not ollama_available:
-        st.warning("⚠️ Ollama is not running. Please start Ollama to use the chatbot.")
-        st.code("ollama serve", language="bash")
+    if not openai_available:
+        st.warning("⚠️ OpenAI API is not available. Please check your API key.")
+        st.info("Set your OPENAI_API_KEY environment variable or add it to a .env file")
         return
     
     # Display chat messages

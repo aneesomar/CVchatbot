@@ -23,7 +23,11 @@ os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
 os.environ["HF_HOME"] = os.path.expanduser("~/.cache/huggingface")
 os.environ["TRANSFORMERS_CACHE"] = os.path.expanduser("~/.cache/huggingface/transformers")
 
-# Model Configuration - Using FREE local Ollama
+# Model Configuration - Using OpenAI
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")  # Default to gpt-3.5-turbo for cost efficiency
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Legacy Ollama config (kept for backward compatibility)
 OLLAMA_MODEL = "llama3.2:1b"  # Free lightweight model
 OLLAMA_BASE_URL = "http://localhost:11434"
 

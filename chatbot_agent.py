@@ -2,8 +2,7 @@ from typing import Dict, Any, Optional
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
-from langchain.schema import BaseRetriever
-from langchain.llms.base import LLM
+from langchain_openai import ChatOpenAI
 
 # Patch ChromaDB telemetry before importing config
 try:
@@ -14,41 +13,20 @@ except:
     pass
 
 import config
-import ollama
 import requests
 
-class OllamaLLM(LLM):
-    """Custom Ollama LLM wrapper for LangChain"""
-    
-    model_name: str = config.OLLAMA_MODEL
-    base_url: str = config.OLLAMA_BASE_URL
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-    
-    @property
-    def _llm_type(self) -> str:
-        return "ollama"
-    
-    def _call(self, prompt: str, stop: Optional[list] = None) -> str:
-        try:
-            response = ollama.chat(
-                model=self.model_name,
-                messages=[{'role': 'user', 'content': prompt}],
-                stream=False
-            )
-            return response['message']['content']
-        except Exception as e:
-            return f"Error calling Ollama: {str(e)}"
-    
-    @property
-    def _identifying_params(self) -> Dict[str, Any]:
-        return {"model_name": self.model_name, "base_url": self.base_url}
-
 class PersonalChatbotAgent:
-    def __init__(self, vector_store_retriever: Optional[BaseRetriever] = None, personality_mode: str = None):
-        # Use free local Ollama model
-        self.llm = OllamaLLM()
+    def __init__(self, vector_store_retriever: Optional[Any] = None, personality_mode: str = None):
+        # Use OpenAI ChatGPT
+        if not config.OPENAI_API_KEY:
+            raise ValueError("OpenAI API key is required. Please set OPENAI_API_KEY environment variable.")
+        
+        self.llm = ChatOpenAI(
+            model_name=config.OPENAI_MODEL,
+            temperature=config.TEMPERATURE,
+            max_tokens=config.MAX_TOKENS,
+            openai_api_key=config.OPENAI_API_KEY
+        )
         
         # Set personality mode
         self.personality_mode = personality_mode or config.DEFAULT_PERSONALITY_MODE
@@ -63,6 +41,21 @@ class PersonalChatbotAgent:
         
         # Create the conversational chain if we have a retriever
         self.chain = self._create_chain()
+    
+    def is_openai_available(self) -> bool:
+        """Check if OpenAI API is accessible"""
+        try:
+            # Simple test call to check API availability
+            test_llm = ChatOpenAI(
+                model_name=config.OPENAI_MODEL,
+                openai_api_key=config.OPENAI_API_KEY,
+                max_tokens=1
+            )
+            test_llm.invoke("test")
+            return True
+        except Exception as e:
+            print(f"OpenAI API not available: {e}")
+            return False
     
     def _create_chain(self):
         """Create or recreate the conversational chain with current personality mode"""
@@ -101,7 +94,7 @@ Answer:"""
             return True
         return False
     
-    def update_retriever(self, vector_store_retriever: Optional[BaseRetriever]):
+    def update_retriever(self, vector_store_retriever: Optional[Any]):
         """Update the retriever and recreate the chain"""
         self.retriever = vector_store_retriever
         self.chain = self._create_chain()
@@ -150,19 +143,11 @@ Answer:"""
         try:
             personality_prompt = config.PERSONALITY_MODES[self.personality_mode]["prompt"]
             prompt = f"{personality_prompt}\n\nUser: {message}\n\nAssistant:"
-            return self.llm._call(prompt)
+            response = self.llm.invoke(prompt)
+            return response.content
         except Exception as e:
             return f"I encountered an error: {str(e)}"
     
     def clear_memory(self):
         """Clear conversation memory"""
         self.memory.clear()
-        
-    def is_ollama_available(self) -> bool:
-        """Check if Ollama is running and model is available"""
-        try:
-            response = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
-            models = response.json().get("models", [])
-            return any(model.get("name") == config.OLLAMA_MODEL for model in models)
-        except:
-            return False
