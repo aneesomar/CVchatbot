@@ -4,9 +4,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Disable ChromaDB telemetry to avoid errors
+# Environment configuration for Streamlit Cloud compatibility
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
-os.environ["CHROMA_TELEMETRY"] = "False"
 os.environ["DO_NOT_TRACK"] = "1"
 
 # Fix tokenizer parallelism warning
@@ -39,9 +38,8 @@ if not OPENAI_API_KEY:
 OLLAMA_MODEL = "llama3.2:1b"  # Free lightweight model
 OLLAMA_BASE_URL = "http://localhost:11434"
 
-# Vector Store Configuration
+# Vector Store Configuration (using FAISS instead of ChromaDB)
 VECTOR_STORE_PATH = os.getenv("VECTOR_STORE_PATH", "./vector_store")
-COLLECTION_NAME = "personal_documents"
 
 # Document Processing Configuration
 DATA_FOLDER = "./data"

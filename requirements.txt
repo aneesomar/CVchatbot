@@ -1,11 +1,11 @@
-# OpenAI-powered chatbot requirements (simplified for compatibility)
+# OpenAI-powered chatbot requirements (optimized for Streamlit Cloud)
 streamlit
 openai
 langchain
 langchain-openai
 langchain-community
 python-dotenv
-chromadb
+faiss-cpu
 tiktoken
 PyPDF2
 python-docx

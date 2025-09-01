@@ -2,15 +2,7 @@ import streamlit as st
 import os
 from pathlib import Path
 
-# Apply ChromaDB telemetry patch first
-try:
-    import sys
-    from unittest.mock import MagicMock
-    sys.modules['posthog'] = MagicMock()
-except:
-    pass
-
-# Suppress warnings
+# Suppress warnings for cleaner output
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -88,17 +80,12 @@ def load_documents_from_data_folder():
         # Try to load existing vector store first
         try:
             with st.spinner("Loading existing documents..."):
-                from utils.suppress_chromadb import suppress_chromadb_output
-                
-                with suppress_chromadb_output():
-                    vector_store = st.session_state.doc_processor.load_existing_vector_store()
+                vector_store = st.session_state.doc_processor.load_existing_vector_store()
                 
                 if vector_store:
-                    # Check if vector store has content
-                    collection = vector_store._collection
-                    count = collection.count()
-                    
-                    if count > 0:
+                    # Check if vector store has content by trying to get the index size
+                    try:
+                        # FAISS vector stores don't have a direct count method, so we check if it exists
                         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
                         # Update existing chatbot agent with new retriever
                         if hasattr(st.session_state, "chatbot_agent") and st.session_state.chatbot_agent:
@@ -111,10 +98,10 @@ def load_documents_from_data_folder():
                                 personality_mode=personality_mode
                             )
                         st.session_state.vector_store_ready = True
-                        st.success(f"✅ Loaded existing vector store with {count} document chunks")
+                        st.success(f"✅ Loaded existing FAISS vector store")
                         return True
-                    else:
-                        st.info("Existing vector store is empty, processing documents...")
+                    except Exception as e:
+                        st.info(f"Vector store exists but may be empty, processing documents... ({str(e)})")
         except Exception as e:
             st.info(f"Could not load existing vector store ({str(e)}), processing documents...")
         

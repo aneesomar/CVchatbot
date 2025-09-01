@@ -718,3 +718,33 @@ The app will now start successfully on Streamlit Cloud and show you exactly what
 
 ---
 
+_**User**_
+
+when i deploy i get these errors: Error loading vector store: [91mYour system has an unsupported version of sqlite3. Chroma requires sqlite3 ≥ 3.35.0.[0m [94mPlease visit https://docs.trychroma.com/troubleshooting#sqlite to learn how to upgrade.[0m
+
+Processing 36 document chunks with free local embeddings...
+
+Error loading documents: [91mYour system has an unsupported version of sqlite3. Chroma requires sqlite3 ≥ 3.35.0.[0m [94mPlease visit https://docs.trychroma.com/troubleshooting#sqlite to learn how to upgrade.[0m
+
+
+
+---
+
+_**Assistant**_
+
+The issue is that Streamlit Cloud has an older version of SQLite3 that's incompatible with ChromaDB. This is a common problem when deploying ChromaDB applications to cloud platforms. Let me fix this by switching to a more deployment-friendly vector store solution.
+
+I'll update the code to use a simpler, file-based vector store that doesn't require SQLite3, or provide an alternative approach. I'll replace ChromaDB with a simple file-based vector store using FAISS, which is more deployment-friendly and doesn't have SQLite dependencies.
+
+First, let me update the `requirements.txt` to include FAISS: 
+```
+
+```
+Now let me update the document processor to use FAISS instead of ChromaDB: 
+```
+
+```
+
+
+---
+

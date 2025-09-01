@@ -4,28 +4,16 @@ from typing import List, Dict
 import PyPDF2
 import docx
 import numpy as np
-
-# Patch ChromaDB telemetry before importing sentence transformers
-try:
-    import sys
-    from unittest.mock import MagicMock
-    sys.modules['posthog'] = MagicMock()
-except:
-    pass
+import pickle
+from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain.schema import Document
 from langchain.embeddings.base import Embeddings
+from langchain_community.vectorstores import FAISS
 import config
-
-# Import suppression utility
-from utils.suppress_chromadb import suppress_chromadb_output
-
-# Import Chroma with suppression
-with suppress_chromadb_output():
-    from langchain_community.vectorstores import Chroma
 
 class LocalEmbeddings(Embeddings):
     """Free local embeddings using sentence-transformers (CPU only)"""
@@ -126,46 +114,42 @@ class DocumentProcessor:
         
         return documents
     
-    def create_vector_store(self, documents: List[Document]) -> Chroma:
-        """Create and populate vector store with documents using free local embeddings."""
-        if not documents:
-            st.warning("No documents found to process!")
-            return None
-        
-        # Split documents into chunks
-        split_documents = self.text_splitter.split_documents(documents)
-        
-        st.info(f"Processing {len(split_documents)} document chunks with free local embeddings...")
-        
-        # Create vector store with local embeddings (suppress telemetry)
-        with suppress_chromadb_output():
-            vector_store = Chroma.from_documents(
-                documents=split_documents,
-                embedding=self.embeddings,
-                collection_name=config.COLLECTION_NAME,
-                persist_directory=config.VECTOR_STORE_PATH
+    def create_vector_store(self, documents: List[Document]) -> FAISS:
+        """Create and save vector store from documents using FAISS."""
+        try:
+            st.info("Creating FAISS vector store...")
+            
+            # Create FAISS vector store
+            vector_store = FAISS.from_documents(
+                documents=documents,
+                embedding=self.embeddings
             )
             
-            # Note: vector_store.persist() is deprecated in Chroma 0.4.x
-            # Documents are automatically persisted
+            # Save the vector store
+            vector_store.save_local(config.VECTOR_STORE_PATH)
+            st.success(f"✅ Vector store saved with {len(documents)} documents")
+            
+        except Exception as e:
+            st.error(f"Error creating vector store: {str(e)}")
+            raise e
         
         return vector_store
     
-    def load_existing_vector_store(self) -> Chroma:
-        """Load existing vector store if it exists."""
+    def load_existing_vector_store(self) -> FAISS:
+        """Load existing FAISS vector store if it exists."""
         try:
-            with suppress_chromadb_output():
-                vector_store = Chroma(
-                    collection_name=config.COLLECTION_NAME,
-                    embedding_function=self.embeddings,
-                    persist_directory=config.VECTOR_STORE_PATH
+            if os.path.exists(os.path.join(config.VECTOR_STORE_PATH, "index.faiss")):
+                vector_store = FAISS.load_local(
+                    config.VECTOR_STORE_PATH, 
+                    self.embeddings,
+                    allow_dangerous_deserialization=True
                 )
-            return vector_store
+                return vector_store
         except Exception as e:
-            st.error(f"Error loading vector store: {str(e)}")
-            return None
+            st.warning(f"Could not load existing vector store: {str(e)}")
+        return None
     
-    def update_documents(self) -> Chroma:
+    def update_documents(self) -> FAISS:
         """Update the vector store with new documents."""
         documents = self.process_documents(config.DATA_FOLDER)
         if documents:

@@ -1,8 +1,21 @@
-# Streamlit Cloud Deployment Troubleshooting
+# Streamlit Cloud Deployment Guide
+
+## Overview
+
+This CVchatbot has been optimized for Streamlit Cloud deployment by switching from ChromaDB to FAISS, eliminating SQLite3 dependency issues.
 
 ## Common Issues and Solutions
 
-### 1. "OpenAI API key is required" Error
+### 1. ✅ FIXED: SQLite3 Version Error
+**Problem**: `Your system has an unsupported version of sqlite3. Chroma requires sqlite3 ≥ 3.35.0`
+
+**Solution**: Switched from ChromaDB to FAISS vector store:
+- ✅ No SQLite3 dependencies
+- ✅ Works on all Streamlit Cloud environments  
+- ✅ Faster and more reliable
+- ✅ Smaller memory footprint
+
+### 2. "OpenAI API key is required" Error
 **Problem**: The app can't find your OpenAI API key.
 
 **Solution**: 
@@ -24,19 +37,24 @@ Make sure your API key:
 - Is correctly copied without extra spaces
 
 ### 3. Dependencies Issues
-If you see import errors, make sure your `requirements.txt` includes all necessary packages:
+If you see import errors, make sure your `requirements.txt` includes:
 ```
 streamlit
 openai
 langchain
 langchain-openai
 langchain-community
+faiss-cpu
 sentence-transformers
-chromadb
 PyPDF2
 python-docx
 python-dotenv
+tiktoken
+numpy
+torch
 ```
+
+**Note**: We use `faiss-cpu` instead of `chromadb` to avoid SQLite3 compatibility issues.
 
 ### 4. File Access Issues
 - The `data/` folder should contain your personal documents

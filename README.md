@@ -1,6 +1,16 @@
 # Personal Chatbot - OpenAI-Powered Context-Aware Assistant
 
-This chatbot is designed to answer questions about me using my personal data including CV, projects, notes, code snippets, and blog posts. It uses OpenAI's powerful GPT models for intelligent responses.
+This chatbot is designed to answer questions about me using my personal data including CV, projects, notes, code snippets, and blog posts. It uses OpenAI's powerful GPT models for intelligent responses and FAISS for efficient document retrieval.
+
+## ✨ Features
+
+- 🤖 **OpenAI GPT Integration** - Powered by ChatGPT for intelligent responses
+- 📚 **Document Processing** - Supports PDF, DOCX, TXT, MD, PY, JS, HTML, CSS, JSON
+- 🔍 **FAISS Vector Search** - Fast and efficient document retrieval (no SQLite dependencies)
+- 🎭 **Multiple Personality Modes** - Interview, storytelling, technical expert, and more
+- 🌐 **Streamlit Cloud Ready** - Optimized for easy deployment
+- 💬 **Chat Memory** - Maintains conversation context
+- 🔒 **Secure** - API keys handled safely through environment variables or Streamlit secrets
 
 ## 🚀 Quick Start
 
