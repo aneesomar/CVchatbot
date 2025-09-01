@@ -19,13 +19,22 @@ class PersonalChatbotAgent:
     def __init__(self, vector_store_retriever: Optional[Any] = None, personality_mode: str = None):
         # Use OpenAI ChatGPT
         if not config.OPENAI_API_KEY:
-            raise ValueError("OpenAI API key is required. Please set OPENAI_API_KEY environment variable.")
+            # Try to get from Streamlit secrets as fallback
+            try:
+                import streamlit as st
+                api_key = st.secrets.get("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError("OpenAI API key is required. Please set OPENAI_API_KEY in environment variables or Streamlit secrets.")
+            except ImportError:
+                raise ValueError("OpenAI API key is required. Please set OPENAI_API_KEY environment variable.")
+        else:
+            api_key = config.OPENAI_API_KEY
         
         self.llm = ChatOpenAI(
             model_name=config.OPENAI_MODEL,
             temperature=config.TEMPERATURE,
             max_tokens=config.MAX_TOKENS,
-            openai_api_key=config.OPENAI_API_KEY
+            openai_api_key=api_key
         )
         
         # Set personality mode

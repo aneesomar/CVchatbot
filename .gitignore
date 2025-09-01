@@ -38,6 +38,7 @@ venv.bak/
 .env.production.local
 *.key
 secrets.json
+.streamlit/secrets.toml
 
 # Vector Databases & Embeddings
 chroma_db/

@@ -40,14 +40,27 @@ def initialize_session_state():
     if "vector_store_ready" not in st.session_state:
         st.session_state.vector_store_ready = False
     if "chatbot_agent" not in st.session_state:
-        st.session_state.chatbot_agent = PersonalChatbotAgent(personality_mode=config.DEFAULT_PERSONALITY_MODE)
-        # Try to automatically load documents from data folder on startup
-        load_documents_from_data_folder()
+        try:
+            st.session_state.chatbot_agent = PersonalChatbotAgent(personality_mode=config.DEFAULT_PERSONALITY_MODE)
+            # Try to automatically load documents from data folder on startup
+            load_documents_from_data_folder()
+        except ValueError as e:
+            st.error(f"❌ Configuration Error: {str(e)}")
+            if "Streamlit Cloud" in str(e) or "secrets" in str(e):
+                st.info("💡 **For Streamlit Cloud deployment:** Add your `OPENAI_API_KEY` in the app's secrets settings")
+            else:
+                st.info("💡 **For local development:** Set `OPENAI_API_KEY` in your `.env` file or environment variables")
+            st.session_state.chatbot_agent = None
 
 def check_openai_status():
     """Check if OpenAI API is available and display status"""
     try:
-        agent = PersonalChatbotAgent()
+        # Check if we have a valid chatbot agent
+        if not hasattr(st.session_state, 'chatbot_agent') or st.session_state.chatbot_agent is None:
+            st.error("❌ OpenAI API not configured")
+            return False
+            
+        agent = st.session_state.chatbot_agent
         if agent.is_openai_available():
             st.success(f"✅ OpenAI API is available with model: {config.OPENAI_MODEL}")
             return True
@@ -56,7 +69,7 @@ def check_openai_status():
             return False
     except ValueError as e:
         st.error(f"❌ {str(e)}")
-        st.info("Please set your OPENAI_API_KEY environment variable or add it to a .env file")
+        st.info("💡 Please configure your OPENAI_API_KEY in Streamlit Cloud secrets or environment variables")
         return False
     except Exception as e:
         st.error(f"❌ Error connecting to OpenAI API: {str(e)}")

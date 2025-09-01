@@ -42,11 +42,46 @@ This chatbot is designed to answer questions about me using my personal data inc
    Open your browser and go to http://localhost:8501
 
 ### Streamlit Cloud Deployment
-This project is optimized for Streamlit Cloud deployment. Simply:
-1. Push your code to GitHub
-2. Connect your repo to Streamlit Cloud
-3. Add your `OPENAI_API_KEY` in the Streamlit Cloud secrets
-4. Deploy!
+
+This project is optimized for Streamlit Cloud deployment:
+
+#### Step 1: Push to GitHub
+```bash
+git add .
+git commit -m "Deploy CVchatbot to Streamlit Cloud"
+git push origin main
+```
+
+#### Step 2: Deploy to Streamlit Cloud
+1. Go to [share.streamlit.io](https://share.streamlit.io)
+2. Click "New app"
+3. Connect your GitHub repository
+4. Choose your repository and branch (main)
+5. Set the main file path to `app.py`
+
+#### Step 3: Configure Secrets
+1. In your Streamlit Cloud dashboard, click "Manage app"
+2. Go to the "Secrets" tab
+3. Add your OpenAI API key:
+   ```toml
+   OPENAI_API_KEY = "your_openai_api_key_here"
+   ```
+4. Save and redeploy
+
+#### Step 4: Upload Your Data
+After deployment, add your personal documents to the `data/` folder and use the "Refresh Documents" button in the app.
+
+### Environment Variables
+The app looks for the OpenAI API key in this order:
+1. Environment variable `OPENAI_API_KEY`
+2. Streamlit Cloud secrets
+3. Local `.env` file
+
+### 🔧 Local Development with Streamlit Secrets
+For local testing with Streamlit secrets:
+1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+2. Add your API key to the file
+3. Run the app normally
 
 ## Features
 
