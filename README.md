@@ -119,3 +119,20 @@ chatBot/
 ├── vector_store/         # ChromaDB storage
 └── requirements.txt      # No OpenAI dependencies!
 ```
+
+## Some Prompts I used:
+
+- My intial prompt I used to setup my Environment :
+
+I am creating a context-aware chatbot that answers questions about me (the candidate) using my personal data (CV, projects, notes, code snippets, blog posts, etc.).
+Key Goals:
+Create an agent that can answer personal/technical questions like:
+“What kind of engineer are you?”
+“What are your strongest skills?”
+“What projects are you most proud of?”
+The agent should sound like me and reflect your personality, values, and experiences.
+i want to use Streamlit + LangChain + OpenAI could you give me a start to this project
+
+- I worked with ollama throughout my project but struggled to deploy it as running a virtual machine that could fulfill those requiremnts was pricey so used a   prompt to migrate from ollama to open AI the exact prompts can be found in Snippet_promptHistory.md
+
+
